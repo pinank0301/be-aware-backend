@@ -1,8 +1,6 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import { urlSchema } from "./schema/url-schema.js";
-import ApiResponse from "./utils/api-response.js";
 dotenv.config();
 const app = express();
 const port = 8000;
@@ -14,7 +12,7 @@ app.use(cors({
     methods: ["GET", "POST", "PUT", "DELETE"], // Ensure needed methods are allowed
     allowedHeaders: ["Content-Type", "Authorization"], // Allow necessary headers
 }));
-app.get('/', (req, res) => {
+app.get("/", (req, res) => {
     res.send("Hello world");
 });
 // routes
