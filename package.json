@@ -7,8 +7,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "tsc -b & node dist/index.js",
-    "start": "node dist/index.js",
-    "build": "tsc -b & pnpx prisma generate"
+    "start": "tsc -b && node dist/index.js",
+    "build": "tsc",
+    "postinstall": "pnpx prisma generate"
   },
   "keywords": [],
   "author": "",
