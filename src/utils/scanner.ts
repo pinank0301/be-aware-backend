@@ -162,24 +162,65 @@ export async function getHostingDetails(
     }
 }
 
+async function getBrowser() {
+    const isVercel = !!process.env.VERCEL;
+
+    if (isVercel) {
+        // Vercel Environment
+        const chromium = (await import('@sparticuz/chromium-min')).default;
+        const puppeteer = await import('puppeteer-core');
+
+        return puppeteer.launch({
+            args: chromium.args,
+            defaultViewport: chromium.defaultViewport,
+            executablePath: await chromium.executablePath('https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar'),
+            headless: chromium.headless,
+        });
+    } else {
+        // Local Environment
+        // Try to use puppeteer first (standard) or fallback to puppeteer-core
+        try {
+            const puppeteer = await import('puppeteer');
+            return puppeteer.default.launch({
+                headless: true,
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu',
+                    '--hide-scrollbars'
+                ]
+            });
+        } catch (e) {
+            console.log("Standard puppeteer not found, trying puppeteer-core...");
+            const puppeteer = await import('puppeteer-core');
+            // On Windows, frequent paths for Chrome:
+            const chromePaths = [
+                'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+                'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
+            ];
+            const fs = await import('fs');
+            const executablePath = chromePaths.find(p => fs.existsSync(p));
+
+            const options: any = {
+                headless: true,
+                args: ['--no-sandbox', '--disable-setuid-sandbox']
+            };
+            if (executablePath) options.executablePath = executablePath;
+
+            return puppeteer.launch(options);
+        }
+    }
+}
+
 export async function takeScreenshot(url: string): Promise<string | null> {
     // Returns the local file path of the screenshot for Cloudinary upload
     let browser;
     try {
-        const puppeteer = await import('puppeteer');
         const fs = await import('fs');
         const path = await import('path');
 
-        browser = await puppeteer.default.launch({
-            headless: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--hide-scrollbars'
-            ]
-        });
+        browser = await getBrowser();
 
         const page = await browser.newPage();
         await page.setViewport({ width: 1280, height: 720 });
