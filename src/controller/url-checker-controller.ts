@@ -122,8 +122,15 @@ export const urlChecker = AsyncHandler(async (req, res) => {
                 const content = data.choices[0].message.content;
                 analysisResult = JSON.parse(content);
             } else {
-                console.error("OpenAI API Error:", data);
-                analysisResult = { error: "Failed to get analysis from AI", details: data };
+                console.error("OpenAI API Error:", JSON.stringify(data, null, 2));
+                if (data.error && data.error.code === 'insufficient_quota') {
+                    analysisResult = {
+                        error: "AI Analysis unavailable (OpenAI Quota Exceeded)",
+                        details: "The system's AI analysis quota has been reached. Please contact support or check your OpenAI billing details."
+                    };
+                } else {
+                    analysisResult = { error: "Failed to get analysis from AI", details: data };
+                }
             }
 
         } catch (error) {
@@ -132,6 +139,41 @@ export const urlChecker = AsyncHandler(async (req, res) => {
         }
     } else {
         analysisResult = { error: "OPENAI_API_KEY not configured" };
+    }
+
+    // FALLBACK: Simple heuristic detection if AI failed (for common brands)
+    if (!analysisResult || analysisResult.error || !analysisResult.legitimate_url) {
+        const lowerHostname = hostname.toLowerCase();
+
+        const BRAND_MAP = [
+            { name: "Microsoft", domain: "microsoft.com", patterns: ["microsoft", "rnicrosoft", "mircosoft", "microsft"] },
+            { name: "Netflix", domain: "netflix.com", patterns: ["netflix", "n3tflix", "netflx"] },
+            { name: "Google", domain: "google.com", patterns: ["google", "g00gle", "googl3"] },
+            { name: "Amazon", domain: "amazon.com", patterns: ["amazon", "amzn"] },
+            { name: "PayPal", domain: "paypal.com", patterns: ["paypal", "paypa1"] },
+            { name: "Facebook", domain: "facebook.com", patterns: ["facebook", "fb."] },
+            { name: "Instagram", domain: "instagram.com", patterns: ["instagram", "ig."] },
+        ];
+
+        for (const brand of BRAND_MAP) {
+            const isMatch = brand.patterns.some(p => lowerHostname.includes(p) || url.toLowerCase().includes(p));
+            const isOfficial = lowerHostname === brand.domain || lowerHostname.endsWith(`.${brand.domain}`);
+
+            if (isMatch && !isOfficial) {
+                console.log(`[Fallback] Detected potential impersonation of ${brand.name} in URL: ${url}`);
+                analysisResult = {
+                    ...analysisResult,
+                    result: "dangerous",
+                    brand_name: brand.name,
+                    legitimate_url: `https://www.${brand.domain}`,
+                    reasons: [
+                        ...(analysisResult?.reasons || []),
+                        `Potential impersonation of ${brand.name} detected by heuristic fallback (Hostname: ${hostname})`
+                    ]
+                };
+                break;
+            }
+        }
     }
 
     // NEW: Capture legitimate website screenshot if AI detected impersonation

@@ -164,14 +164,21 @@ export async function getHostingDetails(
 
 export async function takeScreenshot(url: string): Promise<string | null> {
     // Returns the local file path of the screenshot for Cloudinary upload
+    let browser;
     try {
         const puppeteer = await import('puppeteer');
         const fs = await import('fs');
         const path = await import('path');
 
-        const browser = await puppeteer.default.launch({
+        browser = await puppeteer.default.launch({
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--hide-scrollbars'
+            ]
         });
 
         const page = await browser.newPage();
@@ -180,7 +187,30 @@ export async function takeScreenshot(url: string): Promise<string | null> {
         // Add https if missing for the navigation
         const targetUrl = url.startsWith('http') ? url : `https://${url}`;
 
-        await page.goto(targetUrl, { waitUntil: 'networkidle0', timeout: 30000 }).catch(e => console.error("Page load timeout/error", e));
+        console.log(`Navigating to ${targetUrl}...`);
+
+        try {
+            // Try to navigate with a reasonable timeout
+            await page.goto(targetUrl, {
+                waitUntil: ['load', 'networkidle2'],
+                timeout: 15000
+            });
+        } catch (gotoError: any) {
+            console.error(`Navigation to ${targetUrl} failed or timed out:`, gotoError.message);
+            // If it's a DNS error or connection error, we can't take a screenshot
+            if (gotoError.message.includes('ERR_NAME_NOT_RESOLVED') ||
+                gotoError.message.includes('ERR_CONNECTION_REFUSED') ||
+                gotoError.message.includes('DNS_PROBE_FINISHED_NXDOMAIN')) {
+                return null;
+            }
+            // For other timeouts, we might still try to take a partial screenshot if something loaded
+        }
+
+        // Check if we are still attached to the page after navigation attempt
+        if (page.isClosed()) {
+            console.error("Page was closed during navigation.");
+            return null;
+        }
 
         // Create temp directory if it doesn't exist
         const tempDir = path.join(process.cwd(), 'temp');
@@ -192,12 +222,16 @@ export async function takeScreenshot(url: string): Promise<string | null> {
         const filename = `screenshot-${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
         const filepath = path.join(tempDir, filename);
 
+        console.log(`Taking screenshot: ${filepath}`);
         await page.screenshot({ path: filepath, type: 'jpeg', quality: 60 });
 
-        await browser.close();
         return filepath;
     } catch (e) {
         console.error("Screenshot Error:", e);
         return null;
+    } finally {
+        if (browser) {
+            await browser.close().catch(err => console.error("Error closing browser:", err));
+        }
     }
 }
