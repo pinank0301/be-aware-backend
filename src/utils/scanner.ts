@@ -1,10 +1,6 @@
 import net from "node:net"
 import tls from "node:tls"
 import dns from "node:dns/promises"
-import { URL } from "node:url"
-
-const isVercel = !!process.env.VERCEL
-const isRender = !!process.env.RENDER
 
 interface WhoisInfo {
     raw: string
@@ -49,17 +45,15 @@ export async function getWhoisInfo(domain: string): Promise<WhoisInfo> {
         socket.on("data", (chunk) => (data += chunk))
 
         socket.on("end", () => {
-            const info: WhoisInfo = { raw: data }
+            const extract = (r: RegExp) => data.match(r)?.[1]?.trim()
 
-            const extract = (regex: RegExp) => data.match(regex)?.[1]?.trim()
-
-            info.domainName = extract(/Domain Name:\s+(.+)/i) || undefined
-            info.registrar = extract(/Registrar:\s+(.+)/i) || undefined
-            info.creationDate = extract(/Creation Date:\s+(.+)/i) || undefined
-            info.expirationDate = extract(/Registry Expiry Date:\s+(.+)/i) || undefined
-
-
-            resolve(info)
+            resolve({
+                raw: data,
+                domainName: extract(/Domain Name:\s+(.+)/i),
+                registrar: extract(/Registrar:\s+(.+)/i),
+                creationDate: extract(/Creation Date:\s+(.+)/i),
+                expirationDate: extract(/Registry Expiry Date:\s+(.+)/i),
+            })
         })
 
         socket.on("error", () => resolve({ raw: "Whois lookup failed" }))
@@ -78,7 +72,7 @@ export async function getSSLDetails(hostname: string): Promise<SSLInfo | null> {
             { host: hostname, port: 443, servername: hostname, rejectUnauthorized: false },
             () => {
                 const cert = socket.getPeerCertificate()
-                if (!cert || !cert.valid_to) {
+                if (!cert?.valid_to) {
                     socket.end()
                     resolve(null)
                     return
@@ -128,20 +122,6 @@ export async function getHostingDetails(hostname: string): Promise<HostingInfo |
 /* ========================== BROWSER ========================== */
 
 async function getBrowser() {
-    // VERCEL
-    if (isVercel) {
-        const chromium = (await import("@sparticuz/chromium-min")).default
-        const puppeteer = await import("puppeteer-core")
-
-        return puppeteer.launch({
-            args: chromium.args,
-            defaultViewport: chromium.defaultViewport,
-            executablePath: await chromium.executablePath(),
-            headless: chromium.headless,
-        })
-    }
-
-    // RENDER + LOCAL
     const puppeteer = await import("puppeteer")
 
     return puppeteer.default.launch({
@@ -173,13 +153,13 @@ export async function takeScreenshot(url: string): Promise<string | null> {
 
         try {
             await page.goto(target, { waitUntil: ["load", "networkidle2"], timeout: 15000 })
-        } catch (e: any) {
-            if (e.message?.includes("ERR_NAME_NOT_RESOLVED")) return null
+        } catch {
+            return null
         }
 
         if (page.isClosed()) return null
 
-        const tempDir = isVercel ? "/tmp" : path.join(process.cwd(), "temp")
+        const tempDir = path.join(process.cwd(), "temp")
         if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
 
         const file = path.join(tempDir, `screenshot-${Date.now()}.jpg`)
@@ -190,7 +170,7 @@ export async function takeScreenshot(url: string): Promise<string | null> {
         return null
     } finally {
         if (browser) {
-            await browser.close().catch((err: unknown) => console.error("Close error:", err))
+            await browser.close().catch(() => { })
         }
     }
 }
