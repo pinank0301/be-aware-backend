@@ -174,27 +174,22 @@ async function getBrowser() {
         return puppeteer.launch({
             args: chromium.args,
             defaultViewport: chromium.defaultViewport,
-            executablePath: await chromium.executablePath('https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar'),
+            executablePath: await chromium.executablePath(),
             headless: chromium.headless,
         });
     } else if (isRender) {
-        // Render Environment (Linux)
-        const puppeteer = await import('puppeteer-core');
+    const puppeteer = await import("puppeteer");
 
-        // npx puppeteer browsers install chrome installs into ~/.cache/puppeteer
-        const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/opt/render/.cache/puppeteer/chrome/linux-143.0.7134.0/chrome-linux64/chrome';
-
-        return puppeteer.launch({
-            headless: true,
-            executablePath,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-            ]
-        });
-    } else {
+    return puppeteer.default.launch({
+        headless: true,
+        args: [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+        ],
+    });
+} else {
         // Local Environment
         // Try to use puppeteer first (standard) or fallback to puppeteer-core
         try {
