@@ -3,6 +3,8 @@ import tls from "node:tls";
 import dns from "node:dns/promises";
 import { URL } from "node:url";
 
+const isVercel = !!process.env.VERCEL;
+
 interface WhoisInfo {
     raw: string;
     domainName?: string;
@@ -163,8 +165,6 @@ export async function getHostingDetails(
 }
 
 async function getBrowser() {
-    const isVercel = !!process.env.VERCEL;
-
     if (isVercel) {
         // Vercel Environment
         const chromium = (await import('@sparticuz/chromium-min')).default;
@@ -253,8 +253,9 @@ export async function takeScreenshot(url: string): Promise<string | null> {
             return null;
         }
 
-        // Create temp directory if it doesn't exist
-        const tempDir = path.join(process.cwd(), 'temp');
+        // Create temp directory in a writable location (important for Vercel)
+        const os = await import('os');
+        const tempDir = isVercel ? '/tmp' : path.join(process.cwd(), 'temp');
         if (!fs.existsSync(tempDir)) {
             fs.mkdirSync(tempDir, { recursive: true });
         }
