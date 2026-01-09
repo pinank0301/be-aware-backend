@@ -4,6 +4,7 @@ import dns from "node:dns/promises";
 import { URL } from "node:url";
 
 const isVercel = !!process.env.VERCEL;
+const isRender = !!process.env.RENDER;
 
 interface WhoisInfo {
     raw: string;
@@ -175,6 +176,23 @@ async function getBrowser() {
             defaultViewport: chromium.defaultViewport,
             executablePath: await chromium.executablePath('https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar'),
             headless: chromium.headless,
+        });
+    } else if (isRender) {
+        // Render Environment (Linux)
+        const puppeteer = await import('puppeteer-core');
+
+        // npx puppeteer browsers install chrome installs into ~/.cache/puppeteer
+        const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/opt/render/.cache/puppeteer/chrome/linux-143.0.7134.0/chrome-linux64/chrome';
+
+        return puppeteer.launch({
+            headless: true,
+            executablePath,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+            ]
         });
     } else {
         // Local Environment
